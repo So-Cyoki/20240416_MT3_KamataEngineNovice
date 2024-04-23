@@ -13,10 +13,7 @@ struct Matrix4x4 {
 	float m[4][4];
 };
 
-Matrix4x4 MakeRotateXMatrix(float radian);
-Matrix4x4 MakeRotateYMatrix(float radian);
-Matrix4x4 MakeRotateZMatrix(float radian);
-
+Matrix4x4 MakeAffineMatrix(Vector3 scale, Vector3 rotation, Vector3 translation);
 Matrix4x4 Multiply(Matrix4x4 m1, Matrix4x4 m2);
 
 // 画面にVector3とMatrix4x4を表示する
@@ -35,7 +32,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	char preKeys[256] = {0};
 
 	// 自分の変数
+	Vector3 scale = {1.2f, 0.79f, -2.1f};
 	Vector3 rotate = {0.4f, 1.43f, -0.8f};
+	Vector3 translate = {2.7f, -4.15f, 1.57f};
 
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
@@ -50,10 +49,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓更新処理ここから
 		///
 
-		Matrix4x4 rotateXMatrix = MakeRotateXMatrix(rotate.x);
-		Matrix4x4 rotateYMatrix = MakeRotateYMatrix(rotate.y);
-		Matrix4x4 rotateZMatrix = MakeRotateZMatrix(rotate.z);
-		Matrix4x4 rotateXYZMatrix = Multiply(rotateXMatrix, Multiply(rotateYMatrix, rotateZMatrix));
+		Matrix4x4 worldMatrix = MakeAffineMatrix(scale, rotate, translate);
 
 		///
 		/// ↑更新処理ここまで
@@ -63,10 +59,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓描画処理ここから
 		///
 
-		MatrixScreenPrintf(10, 10, rotateXMatrix, "RotateXMatrix");
-		MatrixScreenPrintf(10, 10 + kRowHeight * 5, rotateYMatrix, "RotateYMatrix");
-		MatrixScreenPrintf(10, 10 + kRowHeight * 5 * 2, rotateZMatrix, "RotateZMatrix");
-		MatrixScreenPrintf(10, 10 + kRowHeight * 5 * 3, rotateXYZMatrix, "RotateXYZMatrix");
+		MatrixScreenPrintf(10, 10, worldMatrix, "WorldMatrix");
 
 		///
 		/// ↑描画処理ここまで
@@ -86,34 +79,41 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	return 0;
 }
 
-Matrix4x4 MakeRotateXMatrix(float radian) {
-	Matrix4x4 mRotationX = {0};
-	mRotationX.m[1][1] = cosf(radian);
-	mRotationX.m[1][2] = sinf(radian);
-	mRotationX.m[2][1] = -sinf(radian);
-	mRotationX.m[2][2] = cosf(radian);
-	mRotationX.m[0][0] = mRotationX.m[3][3] = 1;
-	return mRotationX;
-}
-
-Matrix4x4 MakeRotateYMatrix(float radian) {
-	Matrix4x4 mRotationY = {0};
-	mRotationY.m[0][0] = cosf(radian);
-	mRotationY.m[2][0] = sinf(radian);
-	mRotationY.m[0][2] = -sinf(radian);
-	mRotationY.m[2][2] = cosf(radian);
-	mRotationY.m[1][1] = mRotationY.m[3][3] = 1;
-	return mRotationY;
-}
-
-Matrix4x4 MakeRotateZMatrix(float radian) {
+Matrix4x4 MakeAffineMatrix(Vector3 scale, Vector3 rotation, Vector3 translation) {
+	// Scale
+	Matrix4x4 mScale = {0};
+	mScale.m[0][0] = scale.x;
+	mScale.m[1][1] = scale.y;
+	mScale.m[2][2] = scale.z;
+	mScale.m[3][3] = 1;
+	// Rotation
 	Matrix4x4 mRotationZ = {0};
-	mRotationZ.m[0][0] = cosf(radian);
-	mRotationZ.m[0][1] = sinf(radian);
-	mRotationZ.m[1][0] = -sinf(radian);
-	mRotationZ.m[1][1] = cosf(radian);
+	mRotationZ.m[0][0] = cosf(rotation.z);
+	mRotationZ.m[0][1] = sinf(rotation.z);
+	mRotationZ.m[1][0] = -sinf(rotation.z);
+	mRotationZ.m[1][1] = cosf(rotation.z);
 	mRotationZ.m[2][2] = mRotationZ.m[3][3] = 1;
-	return mRotationZ;
+	Matrix4x4 mRotationX = {0};
+	mRotationX.m[1][1] = cosf(rotation.x);
+	mRotationX.m[1][2] = sinf(rotation.x);
+	mRotationX.m[2][1] = -sinf(rotation.x);
+	mRotationX.m[2][2] = cosf(rotation.x);
+	mRotationX.m[0][0] = mRotationX.m[3][3] = 1;
+	Matrix4x4 mRotationY = {0};
+	mRotationY.m[0][0] = cosf(rotation.y);
+	mRotationY.m[2][0] = sinf(rotation.y);
+	mRotationY.m[0][2] = -sinf(rotation.y);
+	mRotationY.m[2][2] = cosf(rotation.y);
+	mRotationY.m[1][1] = mRotationY.m[3][3] = 1;
+	Matrix4x4 mRotation = Multiply(mRotationX, Multiply(mRotationY, mRotationZ));
+	// Translation
+	Matrix4x4 mTranslation = {0};
+	mTranslation.m[0][0] = mTranslation.m[1][1] = mTranslation.m[2][2] = mTranslation.m[3][3] = 1;
+	mTranslation.m[3][0] = translation.x;
+	mTranslation.m[3][1] = translation.y;
+	mTranslation.m[3][2] = translation.z;
+
+	return Multiply(mScale, Multiply(mRotation, mTranslation));
 }
 
 Matrix4x4 Multiply(Matrix4x4 m1, Matrix4x4 m2) {
