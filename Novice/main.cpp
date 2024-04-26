@@ -33,10 +33,16 @@ Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip
 // ビューポート変換行列
 Matrix4x4 MakeViewportMatrix(float left, float top, float width, float height, float minDepth, float maxDepth);
 
+// クロス積(外積)
+Vector3 Cross(const Vector3& v1, const Vector3& v2);
+// 内積
+float Dot(const Vector3& v1, const Vector3& v2);
+
 // 行列の値をスクリーンに出す
 const int kColumnWidth = 60;
 const int kRowHeight = 20;
 void MatrixScreenPrintf(int x, int y, const Matrix4x4 matrix, const char* label);
+void VectorScreenPrintf(int x, int y, const Vector3& vector, const char* label);
 
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
@@ -62,6 +68,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         {-triangleRadius, -triangleRadius, 0},
         {triangleRadius,  -triangleRadius, 0}
     };
+
+	// クロス積用の変数
+	Vector3 v1 = {1.2f, -3.9f, 2.5f};
+	Vector3 v2 = {2.8f, 0.4f, -1.3f};
+	Vector3 cross = Cross(v1, v2);
 
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
@@ -115,6 +126,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		///
 		/// ↓描画処理ここから
 		///
+
+		VectorScreenPrintf(10, 10, cross, "Cross");
 
 		Novice::DrawTriangle(
 		    int(screenVertices[0].x), int(screenVertices[0].y), int(screenVertices[1].x), int(screenVertices[1].y), int(screenVertices[2].x), int(screenVertices[2].y), RED, kFillModeSolid);
@@ -296,6 +309,16 @@ Matrix4x4 MakeViewportMatrix(float left, float top, float width, float height, f
 	return result;
 }
 
+Vector3 Cross(const Vector3& v1, const Vector3& v2) {
+	Vector3 result{};
+	result.x = v1.y * v2.z - v1.z * v2.y;
+	result.y = v1.z * v2.x - v1.x * v2.z;
+	result.z = v1.x * v2.y - v1.y * v2.x;
+	return result;
+}
+
+float Dot(const Vector3& v1, const Vector3& v2) { return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z; }
+
 void MatrixScreenPrintf(int x, int y, const Matrix4x4 matrix, const char* label) {
 	Novice::ScreenPrintf(x, y, label);
 	for (int row = 0; row < 4; ++row) {
@@ -303,4 +326,11 @@ void MatrixScreenPrintf(int x, int y, const Matrix4x4 matrix, const char* label)
 			Novice::ScreenPrintf(x + column * kColumnWidth, y + row * kRowHeight + kRowHeight, "%6.02f", matrix.m[row][column]);
 		}
 	}
+}
+
+void VectorScreenPrintf(int x, int y, const Vector3& vector, const char* label) {
+	Novice::ScreenPrintf(x, y, "%.02f", vector.x);
+	Novice::ScreenPrintf(x + kColumnWidth, y, "%.02f", vector.y);
+	Novice::ScreenPrintf(x + kColumnWidth * 2, y, "%.02f", vector.z);
+	Novice::ScreenPrintf(x + kColumnWidth * 3, y, "%s", label);
 }
