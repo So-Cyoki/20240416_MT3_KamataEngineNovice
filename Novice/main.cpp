@@ -55,18 +55,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	char preKeys[256] = {0};
 
 	// 自分の変数
-	Vector3 cameraPostion = {0, 0, 0};
+	Vector3 cameraPostion = {0, 0, -10};
 
 	// 三角形の属性
 	Vector3 rotate = {0, 0, 0};
-	Vector3 translate = {0, 0, 10}; // Z軸はカメラより大きくなければ、カメラの前に映れない
+	Vector3 translate = {0, 0, 0}; // Z軸はカメラより大きくなければ、カメラの前に映れない
 	float triangleRadius = 1;
 	float speed = 1;
-	// 三角形のローカル座標頂点(上、左、右)
+	// 三角形のローカル座標頂点(上、右、左)
 	const Vector3 kLocalVertices[3] = {
 	    {0,	           triangleRadius,  0},
-        {-triangleRadius, -triangleRadius, 0},
-        {triangleRadius,  -triangleRadius, 0}
+        {triangleRadius,  -triangleRadius, 0},
+        {-triangleRadius, -triangleRadius, 0}
     };
 
 	// クロス積用の変数
@@ -119,6 +119,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			screenVertices[i] = Transform(ndcVertex, viewprotMatrix);
 		}
 
+		// 三角形の表裏
+		Vector3 lineA = {screenVertices[1].x - screenVertices[0].x, screenVertices[1].y - screenVertices[0].y, screenVertices[1].z - screenVertices[0].z};
+		Vector3 lineB = {screenVertices[2].x - screenVertices[1].x, screenVertices[2].y - screenVertices[1].y, screenVertices[2].z - screenVertices[1].z};
+		float face = Dot(cameraPostion, Cross(lineA, lineB));
+
 		///
 		/// ↑更新処理ここまで
 		///
@@ -129,8 +134,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		VectorScreenPrintf(10, 10, cross, "Cross");
 
-		Novice::DrawTriangle(
-		    int(screenVertices[0].x), int(screenVertices[0].y), int(screenVertices[1].x), int(screenVertices[1].y), int(screenVertices[2].x), int(screenVertices[2].y), RED, kFillModeSolid);
+		// もしfaceは0以下なら、表を映す
+		if (face <= 0) {
+			Novice::DrawTriangle(
+			    int(screenVertices[0].x), int(screenVertices[0].y), int(screenVertices[1].x), int(screenVertices[1].y), int(screenVertices[2].x), int(screenVertices[2].y), RED, kFillModeSolid);
+		}
 
 		///
 		/// ↑描画処理ここまで
