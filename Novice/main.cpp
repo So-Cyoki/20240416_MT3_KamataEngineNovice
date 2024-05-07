@@ -14,6 +14,10 @@ struct Vector3 {
 struct Matrix4x4 {
 	float m[4][4];
 };
+struct Sphere {
+	Vector3 center;
+	float radius;
+};
 const float kWindowWidth = 1280;
 const float kWindwoHeight = 720;
 
@@ -45,7 +49,9 @@ const int kRowHeight = 20;
 void MatrixScreenPrintf(int x, int y, const Matrix4x4 matrix, const char* label);
 void VectorScreenPrintf(int x, int y, const Vector3& vector, const char* label);
 
+// 描画関数
 void DrawGrid(const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM);
+void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM, uint32_t color);
 
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
@@ -58,9 +64,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	char preKeys[256] = {0};
 
 	// 自分の変数
-	Vector3 cameraPostion = {0, 5, -10};
-	Vector3 cameraRotate = {0.45f, 0, 0};
+	Vector3 cameraPostion = {0, 1.9f, -6.49f};
+	Vector3 cameraRotate = {0.26f, 0, 0};
 	Vector3 gridPostion{0, 0, 0};
+	Sphere sphere = {
+	    {0, 0, 0},
+        0.5f
+    };
 
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
@@ -79,6 +89,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		ImGui::Begin("Window");
 		ImGui::DragFloat3("CameraTranslate", &cameraPostion.x, 0.01f);
 		ImGui::DragFloat3("CameraRotate", &cameraRotate.x, 0.01f);
+		ImGui::DragFloat3("SphereCenter", &sphere.center.x, 0.01f);
+		ImGui::DragFloat("SphereRadius", &sphere.radius, 0.01f);
 		ImGui::End();
 
 		// レンダリングパイプライン計算
@@ -89,6 +101,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		Matrix4x4 worldMatrix_grid = MakeAffineMatrix({1, 1, 1}, {0, 0, 0}, gridPostion);
 		Matrix4x4 worldViewProjectionMatrix_grid = Multiply(worldMatrix_grid, Multiply(viewMatrix, projectionMatrix));
+		Matrix4x4 worldMatrix_sphere = MakeAffineMatrix({1, 1, 1}, {0, 0, 0}, sphere.center);
+		Matrix4x4 worldViewProjectionMatrix_sphere = Multiply(worldMatrix_sphere, Multiply(viewMatrix, projectionMatrix));
 
 		///
 		/// ↑更新処理ここまで
@@ -99,6 +113,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		///
 
 		DrawGrid(worldViewProjectionMatrix_grid, viewprotMatrix);
+		DrawSphere(sphere, worldViewProjectionMatrix_sphere, viewprotMatrix, BLACK);
 
 		///
 		/// ↑描画処理ここまで
@@ -355,5 +370,40 @@ void DrawGrid(const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM) {
 			Novice::DrawLine(int(verticalStartPos_screen[zIndex].x), int(verticalStartPos_screen[zIndex].y), int(verticalEndPos_screen[zIndex].x), int(verticalEndPos_screen[zIndex].y), 0xAAAAAAFF);
 		else
 			Novice::DrawLine(int(verticalStartPos_screen[zIndex].x), int(verticalStartPos_screen[zIndex].y), int(verticalEndPos_screen[zIndex].x), int(verticalEndPos_screen[zIndex].y), BLACK);
+	}
+}
+
+void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM, uint32_t color) {
+	const uint32_t kSubdivison = 20;                            // 分割数
+	const float kLatEvery = acosf(-1) / float(kSubdivison);     // 緯度分割１つ分の角度
+	const float kLonEvery = 2 * acosf(-1) / float(kSubdivison); // 経度分割１つ分の角度
+	// 緯度の方向に分割　-pi/2 ~ pi/2
+	for (uint32_t latIndex = 0; latIndex < kSubdivison; latIndex++) {
+		float lat = -acosf(-1) / 2 + kLatEvery * latIndex; // 現在の緯度
+		// 経度の方向に分割　0 ~ 2p	i
+		for (uint32_t lonIndex = 0; lonIndex < kSubdivison; lonIndex++) {
+			float lon = lonIndex * kLonEvery; // 現在の経度
+			// 描画用のローカル座標 Vector abc
+			Vector3 a{}, b{}, c{};
+			a.x = sphere.center.x + sphere.radius * cosf(lat) * cosf(lon);
+			a.y = sphere.center.y + sphere.radius * sinf(lat);
+			a.z = sphere.center.z + sphere.radius * cosf(lat) * sinf(lon);
+			b.x = sphere.center.x + sphere.radius * cosf(lat + kLatEvery) * cosf(lon);
+			b.y = sphere.center.y + sphere.radius * sinf(lat + kLatEvery);
+			b.z = sphere.center.z + sphere.radius * cosf(lat + kLatEvery) * sinf(lon);
+			c.x = sphere.center.x + sphere.radius * cosf(lat) * cosf(lon + kLonEvery);
+			c.y = sphere.center.y + sphere.radius * sinf(lat);
+			c.z = sphere.center.z + sphere.radius * cosf(lat) * sinf(lon + kLonEvery);
+			// スクリーン座標に変換する
+			Vector3 ndcA = Transform(a, viewProjectionM);
+			Vector3 screenA = Transform(ndcA, viewprotM);
+			Vector3 ndcB = Transform(b, viewProjectionM);
+			Vector3 screenB = Transform(ndcB, viewprotM);
+			Vector3 ndcC = Transform(c, viewProjectionM);
+			Vector3 screenC = Transform(ndcC, viewprotM);
+			// 描画
+			Novice::DrawLine(int(screenA.x), int(screenA.y), int(screenB.x), int(screenB.y), color);
+			Novice::DrawLine(int(screenA.x), int(screenA.y), int(screenC.x), int(screenC.y), color);
+		}
 	}
 }
