@@ -1,6 +1,7 @@
 #include <Novice.h>
 #include <cassert>
 #include <cmath>
+#include <imgui.h>
 
 const char kWindowTitle[] = "GC2A_07_ソウ_チョウキ_MT3";
 
@@ -44,6 +45,8 @@ const int kRowHeight = 20;
 void MatrixScreenPrintf(int x, int y, const Matrix4x4 matrix, const char* label);
 void VectorScreenPrintf(int x, int y, const Vector3& vector, const char* label);
 
+void DrawGrid(const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM);
+
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
@@ -55,24 +58,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	char preKeys[256] = {0};
 
 	// 自分の変数
-	Vector3 cameraPostion = {0, 0, -10};
-
-	// 三角形の属性
-	Vector3 rotate = {0, 0, 0};
-	Vector3 translate = {0, 0, 0}; // Z軸はカメラより大きくなければ、カメラの前に映れない
-	float triangleRadius = 1;
-	float speed = 1;
-	// 三角形のローカル座標頂点(上、右、左)
-	const Vector3 kLocalVertices[3] = {
-	    {0,	           triangleRadius,  0},
-        {triangleRadius,  -triangleRadius, 0},
-        {-triangleRadius, -triangleRadius, 0}
-    };
-
-	// クロス積用の変数
-	Vector3 v1 = {1.2f, -3.9f, 2.5f};
-	Vector3 v2 = {2.8f, 0.4f, -1.3f};
-	Vector3 cross = Cross(v1, v2);
+	Vector3 cameraPostion = {0, 5, -10};
+	Vector3 cameraRotate = {0.45f, 0, 0};
+	Vector3 gridPostion{0, 0, 0};
 
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
@@ -87,42 +75,20 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓更新処理ここから
 		///
 
-		// 移動
-		if (keys[DIK_W]) {
-			translate.z += speed;
-		} else if (keys[DIK_S]) {
-			translate.z -= speed;
-		}
-		if (keys[DIK_D]) {
-			translate.x += speed / 20;
-		} else if (keys[DIK_A]) {
-			translate.x -= speed / 20;
-		}
-		// 物はカメラの後ろにするとダメ！
-		if (translate.z <= cameraPostion.z) {
-			translate.z = cameraPostion.z + 0.01f;
-		}
-
-		// 回転
-		rotate.y += speed / 50;
+		// DebugText
+		ImGui::Begin("Window");
+		ImGui::DragFloat3("CameraTranslate", &cameraPostion.x, 0.01f);
+		ImGui::DragFloat3("CameraRotate", &cameraRotate.x, 0.01f);
+		ImGui::End();
 
 		// レンダリングパイプライン計算
-		Matrix4x4 worldMatrix = MakeAffineMatrix({1, 1, 1}, rotate, translate);
-		Matrix4x4 cameraMatrix = MakeAffineMatrix({1, 1, 1}, {0, 0, 0}, cameraPostion);
+		Matrix4x4 cameraMatrix = MakeAffineMatrix({1, 1, 1}, cameraRotate, cameraPostion);
 		Matrix4x4 viewMatrix = Inverse(cameraMatrix);
-		Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, kWindowWidth / kWindwoHeight, 0.1f, 100);
-		Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 		Matrix4x4 viewprotMatrix = MakeViewportMatrix(0, 0, kWindowWidth, kWindwoHeight, 0, 1);
-		Vector3 screenVertices[3]{}; // スクリーンの頂点
-		for (uint32_t i = 0; i < 3; i++) {
-			Vector3 ndcVertex = Transform(kLocalVertices[i], worldViewProjectionMatrix); // 透視投影の頂点
-			screenVertices[i] = Transform(ndcVertex, viewprotMatrix);
-		}
+		Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, kWindowWidth / kWindwoHeight, 0.1f, 100);
 
-		// 三角形の表裏
-		Vector3 lineA = {screenVertices[1].x - screenVertices[0].x, screenVertices[1].y - screenVertices[0].y, screenVertices[1].z - screenVertices[0].z};
-		Vector3 lineB = {screenVertices[2].x - screenVertices[1].x, screenVertices[2].y - screenVertices[1].y, screenVertices[2].z - screenVertices[1].z};
-		float face = Dot(cameraPostion, Cross(lineA, lineB));
+		Matrix4x4 worldMatrix_grid = MakeAffineMatrix({1, 1, 1}, {0, 0, 0}, gridPostion);
+		Matrix4x4 worldViewProjectionMatrix_grid = Multiply(worldMatrix_grid, Multiply(viewMatrix, projectionMatrix));
 
 		///
 		/// ↑更新処理ここまで
@@ -132,13 +98,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓描画処理ここから
 		///
 
-		VectorScreenPrintf(10, 10, cross, "Cross");
-
-		// もしfaceは0以下なら、表を映す
-		if (face <= 0) {
-			Novice::DrawTriangle(
-			    int(screenVertices[0].x), int(screenVertices[0].y), int(screenVertices[1].x), int(screenVertices[1].y), int(screenVertices[2].x), int(screenVertices[2].y), RED, kFillModeSolid);
-		}
+		DrawGrid(worldViewProjectionMatrix_grid, viewprotMatrix);
 
 		///
 		/// ↑描画処理ここまで
@@ -341,4 +301,59 @@ void VectorScreenPrintf(int x, int y, const Vector3& vector, const char* label) 
 	Novice::ScreenPrintf(x + kColumnWidth, y, "%.02f", vector.y);
 	Novice::ScreenPrintf(x + kColumnWidth * 2, y, "%.02f", vector.z);
 	Novice::ScreenPrintf(x + kColumnWidth * 3, y, "%s", label);
+}
+
+void DrawGrid(const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM) {
+	const float kGridHalfWidth = 2.f;                                    // Girdの半分の幅
+	const uint32_t kSubdivision = 10;                                    // 分割数
+	const float kGridEvery = (kGridHalfWidth * 2) / float(kSubdivision); // 一つ分の長さ
+
+	// 線の座標を記録する
+	Vector3 horizontalStartPos_local[kSubdivision + 1]{};
+	Vector3 horizontalEndPos_local[kSubdivision + 1]{};
+	Vector3 verticalStartPos_local[kSubdivision + 1]{};
+	Vector3 verticalEndPos_local[kSubdivision + 1]{};
+
+	Vector3 horizontalStartPos_screen[kSubdivision + 1]{};
+	Vector3 horizontalEndPos_screen[kSubdivision + 1]{};
+	Vector3 verticalStartPos_screen[kSubdivision + 1]{};
+	Vector3 verticalEndPos_screen[kSubdivision + 1]{};
+
+	// 奥から手前への線を順々に引いていく
+	for (uint32_t xIndex = 0; xIndex <= kSubdivision; xIndex++) {
+		// ローカル座標を計算する
+		horizontalStartPos_local[xIndex].x = -kGridHalfWidth;
+		horizontalEndPos_local[xIndex].x = kGridHalfWidth;
+		horizontalStartPos_local[xIndex].z = kGridHalfWidth - xIndex * kGridEvery;
+		horizontalEndPos_local[xIndex].z = kGridHalfWidth - xIndex * kGridEvery;
+		// スクリーン座標に変換する
+		Vector3 ndcStart = Transform(horizontalStartPos_local[xIndex], viewProjectionM);
+		horizontalStartPos_screen[xIndex] = Transform(ndcStart, viewprotM);
+		Vector3 ndcEnd = Transform(horizontalEndPos_local[xIndex], viewProjectionM);
+		horizontalEndPos_screen[xIndex] = Transform(ndcEnd, viewprotM);
+		// 描画
+		if (xIndex != 5)
+			Novice::DrawLine(
+			    int(horizontalStartPos_screen[xIndex].x), int(horizontalStartPos_screen[xIndex].y), int(horizontalEndPos_screen[xIndex].x), int(horizontalEndPos_screen[xIndex].y), 0xAAAAAAFF);
+		else
+			Novice::DrawLine(int(horizontalStartPos_screen[xIndex].x), int(horizontalStartPos_screen[xIndex].y), int(horizontalEndPos_screen[xIndex].x), int(horizontalEndPos_screen[xIndex].y), BLACK);
+	}
+	// 左から右への線を順々に引いていく
+	for (uint32_t zIndex = 0; zIndex <= kSubdivision; zIndex++) {
+		// ローカル座標を計算する
+		verticalStartPos_local[zIndex].x = kGridHalfWidth - zIndex * kGridEvery;
+		verticalEndPos_local[zIndex].x = kGridHalfWidth - zIndex * kGridEvery;
+		verticalStartPos_local[zIndex].z = -kGridHalfWidth;
+		verticalEndPos_local[zIndex].z = kGridHalfWidth;
+		// スクリーン座標に変換する
+		Vector3 ndcStart = Transform(verticalStartPos_local[zIndex], viewProjectionM);
+		verticalStartPos_screen[zIndex] = Transform(ndcStart, viewprotM);
+		Vector3 ndcEnd = Transform(verticalEndPos_local[zIndex], viewProjectionM);
+		verticalEndPos_screen[zIndex] = Transform(ndcEnd, viewprotM);
+		// 描画
+		if (zIndex != 5)
+			Novice::DrawLine(int(verticalStartPos_screen[zIndex].x), int(verticalStartPos_screen[zIndex].y), int(verticalEndPos_screen[zIndex].x), int(verticalEndPos_screen[zIndex].y), 0xAAAAAAFF);
+		else
+			Novice::DrawLine(int(verticalStartPos_screen[zIndex].x), int(verticalStartPos_screen[zIndex].y), int(verticalEndPos_screen[zIndex].x), int(verticalEndPos_screen[zIndex].y), BLACK);
+	}
 }
