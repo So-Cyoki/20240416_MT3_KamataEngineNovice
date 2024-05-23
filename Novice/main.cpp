@@ -5,28 +5,44 @@
 
 const char kWindowTitle[] = "GC2A_07_ソウ_チョウキ_MT3";
 
+#pragma region 自分の型といろんな定数
 // 自分の型
-struct Vector3 {
+struct Vector3 { // ベクトル３
 	float x;
 	float y;
 	float z;
 };
-struct Matrix4x4 {
+struct Matrix4x4 { // 4x4行列
 	float m[4][4];
 };
-struct Sphere {
+struct Segment {    // 線分
+	Vector3 origin; // 始点
+	Vector3 diff;   // 終点への差分ベクトル
+};
+struct Sphere { // 球
 	Vector3 center;
 	float radius;
 };
-const float kWindowWidth = 1280;
-const float kWindwoHeight = 720;
+const float kWindowWidth = 1280; // スクリーンの横
+const float kWindwoHeight = 720; // スクリーンの縦
+#pragma endregion
 
-// アフィン変換
+#pragma region 数学計算
+// 単位ベクトル
+Vector3 UnitVector(const Vector3& v);
+// 足算
+Vector3 Add(const Vector3& v1, const Vector3& v2);
+// 引き算
+Vector3 Subtract(const Vector3& v1, const Vector3& v2);
+// クロス積(外積)
+Vector3 Cross(const Vector3& v1, const Vector3& v2);
+// 内積
+float Dot(const Vector3& v1, const Vector3& v2);
+
+//  アフィン変換
 Matrix4x4 MakeAffineMatrix(Vector3 scale, Vector3 rotation, Vector3 translation);
 // 掛け算
 Matrix4x4 Multiply(Matrix4x4 m1, Matrix4x4 m2);
-// 座標変換
-Vector3 Transform(const Vector3& vector, const Matrix4x4& matrix);
 // 逆行列
 Matrix4x4 Inverse(const Matrix4x4& m);
 // 転置行列
@@ -38,20 +54,28 @@ Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip
 // ビューポート変換行列
 Matrix4x4 MakeViewportMatrix(float left, float top, float width, float height, float minDepth, float maxDepth);
 
-// クロス積(外積)
-Vector3 Cross(const Vector3& v1, const Vector3& v2);
-// 内積
-float Dot(const Vector3& v1, const Vector3& v2);
+// 座標変換
+Vector3 Transform(const Vector3& vector, const Matrix4x4& matrix);
+// 正射影ベクトル
+Vector3 Project(const Vector3& v1, const Vector3& v2);
+// 最近接点
+Vector3 ClosestPoint(const Vector3& point, const Segment& segment);
+#pragma endregion
 
-// 行列の値をスクリーンに出す
+#pragma region 工具
+// 行列、ベクトルの値をスクリーンに出す
 const int kColumnWidth = 60;
 const int kRowHeight = 20;
 void MatrixScreenPrintf(int x, int y, const Matrix4x4 matrix, const char* label);
 void VectorScreenPrintf(int x, int y, const Vector3& vector, const char* label);
+#pragma endregion
 
-// 描画関数
+#pragma region 描画関数
+// 3Dスペースの平面としてネットを描画
 void DrawGrid(const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM);
+// 球を描画
 void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM, uint32_t color);
+#pragma endregion
 
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
@@ -64,13 +88,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	char preKeys[256] = {0};
 
 	// 自分の変数
-	Vector3 cameraPostion = {0, 1.9f, -6.49f};
-	Vector3 cameraRotate = {0.26f, 0, 0};
-	Vector3 gridPostion{0, 0, 0};
-	Sphere sphere = {
-	    {0, 0, 0},
-        0.5f
+	Vector3 cameraPostion = {0, 1.9f, -6.49f}; // カメラの座標
+	Vector3 cameraRotate = {0.26f, 0, 0};      // カメラの回転
+	Vector3 gridPostion{0, 0, 0};              // ネットの座標
+
+	Segment segment{
+	    {-2, -1, 0},
+        {3,  2,  2}
     };
+	Vector3 point{-1.5f, 0.6f, 0.6f};
 
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
@@ -85,12 +111,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓更新処理ここから
 		///
 
+		Vector3 project = Project(Subtract(point, segment.origin), segment.diff);
+		Vector3 closestPoint = ClosestPoint(point, segment);
+		Sphere pointSphere = {point, 0.01f};
+		Sphere closestPointSphere = {closestPoint, 0.01f};
+
 		// DebugText
 		ImGui::Begin("Window");
 		ImGui::DragFloat3("CameraTranslate", &cameraPostion.x, 0.01f);
 		ImGui::DragFloat3("CameraRotate", &cameraRotate.x, 0.01f);
-		ImGui::DragFloat3("SphereCenter", &sphere.center.x, 0.01f);
-		ImGui::DragFloat("SphereRadius", &sphere.radius, 0.01f);
+		ImGui::InputFloat3("Point", &point.x, "%.3f", ImGuiInputTextFlags_ReadOnly);
+		ImGui::InputFloat3("Segment origin", &segment.origin.x, "%.3f", ImGuiInputTextFlags_ReadOnly);
+		ImGui::InputFloat3("Segment diff", &segment.diff.x, "%.3f", ImGuiInputTextFlags_ReadOnly);
+		ImGui::InputFloat3("Project", &project.x, "%.3f", ImGuiInputTextFlags_ReadOnly);
 		ImGui::End();
 
 		// レンダリングパイプライン計算
@@ -99,10 +132,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		Matrix4x4 viewprotMatrix = MakeViewportMatrix(0, 0, kWindowWidth, kWindwoHeight, 0, 1);
 		Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, kWindowWidth / kWindwoHeight, 0.1f, 100);
 
-		Matrix4x4 worldMatrix_grid = MakeAffineMatrix({1, 1, 1}, {0, 0, 0}, gridPostion);
-		Matrix4x4 worldViewProjectionMatrix_grid = Multiply(worldMatrix_grid, Multiply(viewMatrix, projectionMatrix));
-		Matrix4x4 worldMatrix_sphere = MakeAffineMatrix({1, 1, 1}, {0, 0, 0}, sphere.center);
-		Matrix4x4 worldViewProjectionMatrix_sphere = Multiply(worldMatrix_sphere, Multiply(viewMatrix, projectionMatrix));
+		Matrix4x4 worldMatrix = MakeAffineMatrix({1, 1, 1}, {0, 0, 0}, gridPostion);
+		Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
+
+		// 線分はスクリーン座標に変える
+		Vector3 start = Transform(Transform(segment.origin, worldViewProjectionMatrix), viewprotMatrix);
+		Vector3 end = Transform(Transform(Add(segment.origin, segment.diff), worldViewProjectionMatrix), viewprotMatrix);
 
 		///
 		/// ↑更新処理ここまで
@@ -112,8 +147,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓描画処理ここから
 		///
 
-		DrawGrid(worldViewProjectionMatrix_grid, viewprotMatrix);
-		DrawSphere(sphere, worldViewProjectionMatrix_sphere, viewprotMatrix, BLACK);
+		DrawGrid(worldViewProjectionMatrix, viewprotMatrix);
+		Novice::DrawLine((int)start.x, (int)start.y, (int)end.x, (int)end.y, WHITE);
+		DrawSphere(pointSphere, worldViewProjectionMatrix, viewprotMatrix, RED);
+		DrawSphere(closestPointSphere, worldViewProjectionMatrix, viewprotMatrix, BLACK);
 
 		///
 		/// ↑描画処理ここまで
@@ -132,6 +169,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Novice::Finalize();
 	return 0;
 }
+
+/// --------------詳しい関数の実行する内容-------------- ///
+
+Vector3 UnitVector(const Vector3& v) {
+	float length = sqrtf(powf(v.x, 2) + powf(v.y, 2) + powf(v.z, 2));
+	return Vector3(v.x / length, v.y / length, v.z / length);
+}
+
+Vector3 Add(const Vector3& v1, const Vector3& v2) { return Vector3(v1.x + v2.x, v1.y + v2.y, v1.z + v2.z); }
+
+Vector3 Subtract(const Vector3& v1, const Vector3& v2) { return Vector3(v1.x - v2.x, v1.y - v2.y, v1.z - v2.z); }
 
 Matrix4x4 MakeAffineMatrix(Vector3 scale, Vector3 rotation, Vector3 translation) {
 	// Scale
@@ -406,4 +454,16 @@ void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectionM, const Ma
 			Novice::DrawLine(int(screenA.x), int(screenA.y), int(screenC.x), int(screenC.y), color);
 		}
 	}
+}
+
+Vector3 Project(const Vector3& v1, const Vector3& v2) {
+	float dot = Dot(v1, UnitVector(v2));
+	return Vector3(dot * UnitVector(v2).x, dot * UnitVector(v2).y, dot * UnitVector(v2).z);
+}
+
+Vector3 ClosestPoint(const Vector3& point, const Segment& segment) {
+	Vector3 a = Subtract(point, segment.origin);
+	Vector3 b = segment.diff;
+	Vector3 projBA = Project(a, b);
+	return Add(segment.origin, projBA);
 }
