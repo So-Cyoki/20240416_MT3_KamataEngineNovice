@@ -83,7 +83,10 @@ void VectorScreenPrintf(int x, int y, const Vector3& vector, const char* label);
 
 // マウスでカメラを移動
 Vector2 preMousePos{}; // 前１フレームの位置
+// マウスでカメラを制御する
 void MouseCamera(Vector3* cameraPos, Vector3* cameraRotate, char key[]);
+// マウスでカメラを制御する時アイコンを表す
+void MouseCameraDrawIcon(float windowWidth, float windowHeight);
 #pragma endregion
 
 #pragma region 描画関数
@@ -131,9 +134,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		///
 
 		// DebugText
-		ImGui::Begin("Window");
-		ImGui::DragFloat3("CameraTranslate", &cameraPostion.x, 0.01f);
-		ImGui::DragFloat3("CameraRotate", &cameraRotate.x, 0.01f);
+		ImGui::Begin("DeBug Window");
+		ImGui::DragFloat3("Camera Translate", &cameraPostion.x, 0.01f);
+		ImGui::DragFloat3("Camera Rotate", &cameraRotate.x, 0.01f);
 		ImGui::DragFloat3("SphereA Center", &sphereA.center.x, 0.01f);
 		ImGui::DragFloat("SphereA Radius", &sphereA.radius, 0.01f);
 		ImGui::DragFloat3("SphereB Center", &sphereB.center.x, 0.01f);
@@ -169,6 +172,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		DrawGrid(worldViewProjectionMatrix, viewprotMatrix);
 		DrawSphere(sphereB, worldViewProjectionMatrix, viewprotMatrix, WHITE);
 		DrawSphere(sphereA, worldViewProjectionMatrix, viewprotMatrix, color);
+
+		MouseCameraDrawIcon(kWindowWidth, kWindwoHeight);
 
 		///
 		/// ↑描画処理ここまで
@@ -390,8 +395,8 @@ void VectorScreenPrintf(int x, int y, const Vector3& vector, const char* label) 
 
 void MouseCamera(Vector3* cameraPos, Vector3* cameraRotate, char key[]) {
 	Vector3 front{}, right{}, up{}, move{}; // カメラの前・横・上の向きと総合の移動ベクトル
-	float speed = 0.1f;
-	bool isMouseMove = false; // マウスで移動
+	float speed = 0.1f;                     // スピード
+	bool isMouseMove = false;               // マウスで移動
 	//  カメラの前方向を計算
 	front.x = sinf(cameraRotate->y) * cosf(cameraRotate->x);
 	front.y = -sinf(cameraRotate->x);
@@ -406,6 +411,7 @@ void MouseCamera(Vector3* cameraPos, Vector3* cameraRotate, char key[]) {
 	up = Normalize(up);
 
 	if (Novice::IsPressMouse(1)) {
+		// キーボードで移動
 		if (key[DIK_W]) {
 			move = Add(move, front);
 		} else if (key[DIK_S]) {
@@ -429,8 +435,8 @@ void MouseCamera(Vector3* cameraPos, Vector3* cameraRotate, char key[]) {
 	if (Novice::IsPressMouse(1)) {
 		// マウスの右キー
 		currentMousePos = {float(mousePosX), float(mousePosY)};
-		cameraRotate->x += (currentMousePos.y - preMousePos.y) / 500;
-		cameraRotate->y += (currentMousePos.x - preMousePos.x) / 500;
+		cameraRotate->x += (currentMousePos.y - preMousePos.y) / 700;
+		cameraRotate->y += (currentMousePos.x - preMousePos.x) / 700;
 		preMousePos = {float(mousePosX), float(mousePosY)};
 	} else if (Novice::IsPressMouse(2)) {
 		// マウスの中キー
@@ -456,6 +462,54 @@ void MouseCamera(Vector3* cameraPos, Vector3* cameraRotate, char key[]) {
 	cameraPos->x += move.x;
 	cameraPos->y += move.y;
 	cameraPos->z += move.z;
+}
+
+void MouseCameraDrawIcon(float windowWidth, float windowHeight) {
+	windowWidth;
+	// Text
+	float textLine = 17;
+	Vector2 textPos{0 + 5, windowHeight - textLine * 5 - 5};
+	Novice::ScreenPrintf(int(textPos.x), int(textPos.y), "----- Mouse Camera Usage -----");
+	Novice::ScreenPrintf(int(textPos.x), int(textPos.y + textLine * 1), "(The control logic is the same as Unity)");
+	Novice::ScreenPrintf(int(textPos.x), int(textPos.y + textLine * 2), "Right mouse: camera rotation");
+	Novice::ScreenPrintf(int(textPos.x), int(textPos.y + textLine * 3), "Middle mouse: camera movement and zoom in/out");
+	Novice::ScreenPrintf(int(textPos.x), int(textPos.y + textLine * 4), "Right mouse + WASD: camera move");
+	// Icon
+	int mouseX, mouseY;
+	Novice::GetMousePosition(&mouseX, &mouseY);
+	Vector2 currentMousePos{float(mouseX), float(mouseY)};
+	Vector2 eyeSize{9, 5}, boxSize{3, 3}, boxPos{9, 7}; // マウスの右キーのアイコン
+	Vector2 headSize{6, 7}, fingerSize{3, 9};           // マウスの中キーのアイコン
+	if (Novice::IsPressMouse(1)) {
+		// Eye
+		Novice::DrawEllipse((int)currentMousePos.x, (int)currentMousePos.y, int(eyeSize.x), int(eyeSize.y), 0, WHITE, kFillModeSolid);
+		Novice::DrawEllipse((int)currentMousePos.x, (int)currentMousePos.y, int(eyeSize.x + 1), int(eyeSize.y + 1), 0, BLACK, kFillModeWireFrame);
+		Novice::DrawEllipse((int)currentMousePos.x, (int)currentMousePos.y, int(eyeSize.y - 1), int(eyeSize.y - 1), 0, BLACK, kFillModeWireFrame);
+		// MoveBox
+		Novice::DrawBox(int(currentMousePos.x + boxPos.x), int(currentMousePos.y + boxPos.y), int(boxSize.x), int(boxSize.y), 0, WHITE, kFillModeSolid);
+		Novice::DrawBox(int(currentMousePos.x + boxPos.x), int(currentMousePos.y + boxPos.y), int(boxSize.x + 1), int(boxSize.y + 1), 0, BLACK, kFillModeWireFrame);
+		Novice::DrawBox(int(currentMousePos.x + boxPos.x), int(currentMousePos.y + boxPos.y + boxSize.y + 1), int(boxSize.x), int(boxSize.y), 0, WHITE, kFillModeSolid);
+		Novice::DrawBox(int(currentMousePos.x + boxPos.x), int(currentMousePos.y + boxPos.y + boxSize.y + 1), int(boxSize.x + 1), int(boxSize.y + 1), 0, BLACK, kFillModeWireFrame);
+		Novice::DrawBox(int(currentMousePos.x + boxPos.x - boxSize.x - 1), int(currentMousePos.y + boxPos.y + boxSize.y + 1), int(boxSize.x), int(boxSize.y), 0, WHITE, kFillModeSolid);
+		Novice::DrawBox(int(currentMousePos.x + boxPos.x - boxSize.x - 1), int(currentMousePos.y + boxPos.y + boxSize.y + 1), int(boxSize.x + 1), int(boxSize.y + 1), 0, BLACK, kFillModeWireFrame);
+		Novice::DrawBox(int(currentMousePos.x + boxPos.x + boxSize.x + 1), int(currentMousePos.y + boxPos.y + boxSize.y + 1), int(boxSize.x), int(boxSize.y), 0, WHITE, kFillModeSolid);
+		Novice::DrawBox(int(currentMousePos.x + boxPos.x + boxSize.x + 1), int(currentMousePos.y + boxPos.y + boxSize.y + 1), int(boxSize.x + 1), int(boxSize.y + 1), 0, BLACK, kFillModeWireFrame);
+	} else if (Novice::IsPressMouse(2)) {
+		// Finger
+		Novice::DrawBox(int(currentMousePos.x - 5), int(currentMousePos.y - 13), int(fingerSize.x), int(fingerSize.y), 0, WHITE, kFillModeSolid);
+		Novice::DrawBox(int(currentMousePos.x - 5), int(currentMousePos.y - 13), int(fingerSize.x + 1), int(fingerSize.y + 1), 0, BLACK, kFillModeWireFrame);
+		Novice::DrawBox(int(currentMousePos.x - 8), int(currentMousePos.y - 7), int(fingerSize.x), int(fingerSize.y), 0, WHITE, kFillModeSolid);
+		Novice::DrawBox(int(currentMousePos.x - 8), int(currentMousePos.y - 7), int(fingerSize.x + 1), int(fingerSize.y + 1), 0, BLACK, kFillModeWireFrame);
+		Novice::DrawBox(int(currentMousePos.x - 1), int(currentMousePos.y - 14), int(fingerSize.x), int(fingerSize.y), 0, WHITE, kFillModeSolid);
+		Novice::DrawBox(int(currentMousePos.x - 1), int(currentMousePos.y - 14), int(fingerSize.x + 1), int(fingerSize.y + 1), 0, BLACK, kFillModeWireFrame);
+		Novice::DrawBox(int(currentMousePos.x + 6), int(currentMousePos.y - 10), int(fingerSize.x), int(fingerSize.y), 0, WHITE, kFillModeSolid);
+		Novice::DrawBox(int(currentMousePos.x + 6), int(currentMousePos.y - 10), int(fingerSize.x + 1), int(fingerSize.y + 1), 0, BLACK, kFillModeWireFrame);
+		Novice::DrawBox(int(currentMousePos.x + 3), int(currentMousePos.y - 12), int(fingerSize.x), int(fingerSize.y), 0, WHITE, kFillModeSolid);
+		Novice::DrawBox(int(currentMousePos.x + 3), int(currentMousePos.y - 12), int(fingerSize.x + 1), int(fingerSize.y + 1), 0, BLACK, kFillModeWireFrame);
+		// Head
+		Novice::DrawEllipse((int)currentMousePos.x + 2, (int)currentMousePos.y + 1, int(headSize.x), int(headSize.y), 0, WHITE, kFillModeSolid);
+		Novice::DrawEllipse((int)currentMousePos.x + 2, (int)currentMousePos.y + 1, int(headSize.x + 1), int(headSize.y + 1), 0, BLACK, kFillModeWireFrame);
+	}
 }
 
 void DrawGrid(const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM) {
