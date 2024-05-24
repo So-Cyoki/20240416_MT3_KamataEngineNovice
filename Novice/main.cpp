@@ -7,7 +7,11 @@ const char kWindowTitle[] = "GC2A_07_ソウ_チョウキ_MT3";
 
 #pragma region 自分の型といろんな定数
 // 自分の型
-struct Vector3 { // ベクトル３
+struct Vector2 { // ベクトル2
+	float x;
+	float y;
+};
+struct Vector3 { // ベクトル3
 	float x;
 	float y;
 	float z;
@@ -28,16 +32,20 @@ const float kWindwoHeight = 720; // スクリーンの縦
 #pragma endregion
 
 #pragma region 数学計算
-// 単位ベクトル
-Vector3 UnitVector(const Vector3& v);
-// 足算
+// 加算
 Vector3 Add(const Vector3& v1, const Vector3& v2);
-// 引き算
+// 減算
 Vector3 Subtract(const Vector3& v1, const Vector3& v2);
-// クロス積(外積)
-Vector3 Cross(const Vector3& v1, const Vector3& v2);
+// スカラー倍
+Vector3 Multiply(float scalar, const Vector3& v);
 // 内積
 float Dot(const Vector3& v1, const Vector3& v2);
+// クロス積(外積)
+Vector3 Cross(const Vector3& v1, const Vector3& v2);
+// 長さ
+float Length(const Vector3& v);
+// 正規化
+Vector3 Normalize(const Vector3& v);
 
 //  アフィン変換
 Matrix4x4 MakeAffineMatrix(Vector3 scale, Vector3 rotation, Vector3 translation);
@@ -62,12 +70,20 @@ Vector3 Project(const Vector3& v1, const Vector3& v2);
 Vector3 ClosestPoint(const Vector3& point, const Segment& segment);
 #pragma endregion
 
+#pragma region 物理計算
+bool IsCollision(const Sphere& s1, const Sphere& s2);
+#pragma endregion
+
 #pragma region 工具
 // 行列、ベクトルの値をスクリーンに出す
 const int kColumnWidth = 60;
 const int kRowHeight = 20;
 void MatrixScreenPrintf(int x, int y, const Matrix4x4 matrix, const char* label);
 void VectorScreenPrintf(int x, int y, const Vector3& vector, const char* label);
+
+// マウスでカメラを移動
+Vector2 preMousePos{}; // 前１フレームの位置
+void MouseCamera(Vector3* cameraPos, Vector3* cameraRotate, char key[]);
 #pragma endregion
 
 #pragma region 描画関数
@@ -92,11 +108,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Vector3 cameraRotate = {0.26f, 0, 0};      // カメラの回転
 	Vector3 gridPostion{0, 0, 0};              // ネットの座標
 
-	Segment segment{
-	    {-2, -1, 0},
-        {3,  2,  2}
+	Sphere sphereA = {
+	    {0, 0, 0},
+        1.f
     };
-	Vector3 point{-1.5f, 0.6f, 0.6f};
+	Sphere sphereB = {
+	    {1.5f, 0, 1.5f},
+        0.5f
+    };
 
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
@@ -111,22 +130,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓更新処理ここから
 		///
 
-		Vector3 project = Project(Subtract(point, segment.origin), segment.diff);
-		Vector3 closestPoint = ClosestPoint(point, segment);
-		Sphere pointSphere = {point, 0.01f};
-		Sphere closestPointSphere = {closestPoint, 0.01f};
-
 		// DebugText
 		ImGui::Begin("Window");
 		ImGui::DragFloat3("CameraTranslate", &cameraPostion.x, 0.01f);
 		ImGui::DragFloat3("CameraRotate", &cameraRotate.x, 0.01f);
-		ImGui::InputFloat3("Point", &point.x, "%.3f", ImGuiInputTextFlags_ReadOnly);
-		ImGui::InputFloat3("Segment origin", &segment.origin.x, "%.3f", ImGuiInputTextFlags_ReadOnly);
-		ImGui::InputFloat3("Segment diff", &segment.diff.x, "%.3f", ImGuiInputTextFlags_ReadOnly);
-		ImGui::InputFloat3("Project", &project.x, "%.3f", ImGuiInputTextFlags_ReadOnly);
+		ImGui::DragFloat3("SphereA Center", &sphereA.center.x, 0.01f);
+		ImGui::DragFloat("SphereA Radius", &sphereA.radius, 0.01f);
+		ImGui::DragFloat3("SphereB Center", &sphereB.center.x, 0.01f);
+		ImGui::DragFloat("SphereB Radius", &sphereB.radius, 0.01f);
 		ImGui::End();
 
+		MouseCamera(&cameraPostion, &cameraRotate, keys);
+
 		// レンダリングパイプライン計算
+		if (cameraPostion.z == 0) // 反対側がないので、Z軸必ず０にしないで！
+			cameraPostion.z = -0.0001f;
 		Matrix4x4 cameraMatrix = MakeAffineMatrix({1, 1, 1}, cameraRotate, cameraPostion);
 		Matrix4x4 viewMatrix = Inverse(cameraMatrix);
 		Matrix4x4 viewprotMatrix = MakeViewportMatrix(0, 0, kWindowWidth, kWindwoHeight, 0, 1);
@@ -135,9 +153,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		Matrix4x4 worldMatrix = MakeAffineMatrix({1, 1, 1}, {0, 0, 0}, gridPostion);
 		Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 
-		// 線分はスクリーン座標に変える
-		Vector3 start = Transform(Transform(segment.origin, worldViewProjectionMatrix), viewprotMatrix);
-		Vector3 end = Transform(Transform(Add(segment.origin, segment.diff), worldViewProjectionMatrix), viewprotMatrix);
+		// 衝突判定
+		uint32_t color = WHITE;
+		if (IsCollision(sphereA, sphereB))
+			color = RED;
 
 		///
 		/// ↑更新処理ここまで
@@ -148,9 +167,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		///
 
 		DrawGrid(worldViewProjectionMatrix, viewprotMatrix);
-		Novice::DrawLine((int)start.x, (int)start.y, (int)end.x, (int)end.y, WHITE);
-		DrawSphere(pointSphere, worldViewProjectionMatrix, viewprotMatrix, RED);
-		DrawSphere(closestPointSphere, worldViewProjectionMatrix, viewprotMatrix, BLACK);
+		DrawSphere(sphereB, worldViewProjectionMatrix, viewprotMatrix, WHITE);
+		DrawSphere(sphereA, worldViewProjectionMatrix, viewprotMatrix, color);
 
 		///
 		/// ↑描画処理ここまで
@@ -172,14 +190,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 /// --------------詳しい関数の実行する内容-------------- ///
 
-Vector3 UnitVector(const Vector3& v) {
-	float length = sqrtf(powf(v.x, 2) + powf(v.y, 2) + powf(v.z, 2));
-	return Vector3(v.x / length, v.y / length, v.z / length);
-}
-
 Vector3 Add(const Vector3& v1, const Vector3& v2) { return Vector3(v1.x + v2.x, v1.y + v2.y, v1.z + v2.z); }
 
 Vector3 Subtract(const Vector3& v1, const Vector3& v2) { return Vector3(v1.x - v2.x, v1.y - v2.y, v1.z - v2.z); }
+
+Vector3 Multiply(float scalar, const Vector3& v) { return Vector3(scalar * v.x, scalar * v.y, scalar * v.z); }
 
 Matrix4x4 MakeAffineMatrix(Vector3 scale, Vector3 rotation, Vector3 translation) {
 	// Scale
@@ -348,6 +363,13 @@ Vector3 Cross(const Vector3& v1, const Vector3& v2) {
 	return result;
 }
 
+float Length(const Vector3& v) { return sqrtf(v.x * v.x + v.y * v.y + v.z * v.z); }
+
+Vector3 Normalize(const Vector3& v) {
+	float length = sqrtf(powf(v.x, 2) + powf(v.y, 2) + powf(v.z, 2));
+	return Vector3(v.x / length, v.y / length, v.z / length);
+}
+
 float Dot(const Vector3& v1, const Vector3& v2) { return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z; }
 
 void MatrixScreenPrintf(int x, int y, const Matrix4x4 matrix, const char* label) {
@@ -364,6 +386,76 @@ void VectorScreenPrintf(int x, int y, const Vector3& vector, const char* label) 
 	Novice::ScreenPrintf(x + kColumnWidth, y, "%.02f", vector.y);
 	Novice::ScreenPrintf(x + kColumnWidth * 2, y, "%.02f", vector.z);
 	Novice::ScreenPrintf(x + kColumnWidth * 3, y, "%s", label);
+}
+
+void MouseCamera(Vector3* cameraPos, Vector3* cameraRotate, char key[]) {
+	Vector3 front{}, right{}, up{}, move{}; // カメラの前・横・上の向きと総合の移動ベクトル
+	float speed = 0.1f;
+	bool isMouseMove = false; // マウスで移動
+	//  カメラの前方向を計算
+	front.x = sinf(cameraRotate->y) * cosf(cameraRotate->x);
+	front.y = -sinf(cameraRotate->x);
+	front.z = cosf(cameraRotate->y) * cosf(cameraRotate->x);
+	front = Normalize(front);
+	// カメラの横方向を計算
+	Vector3 worldUp{0, 1, 0};
+	right = Cross(front, worldUp);
+	right = Normalize(right);
+	// カメラの上方向を計算
+	up = Cross(right, front);
+	up = Normalize(up);
+
+	if (Novice::IsPressMouse(1)) {
+		if (key[DIK_W]) {
+			move = Add(move, front);
+		} else if (key[DIK_S]) {
+			move = Add(move, Multiply(-1, front));
+		}
+		if (key[DIK_D]) {
+			move = Add(move, Multiply(-1, right));
+		} else if (key[DIK_A]) {
+			move = Add(move, right);
+		}
+	} else {
+		// マウスのホイールスクロール
+		isMouseMove = true;
+		move = Multiply(float(Novice::GetWheel()) / 100, front);
+	}
+
+	// カメラをマウスで回転
+	int mousePosX, mousePosY;
+	Novice::GetMousePosition(&mousePosX, &mousePosY);
+	Vector2 currentMousePos{};
+	if (Novice::IsPressMouse(1)) {
+		// マウスの右キー
+		currentMousePos = {float(mousePosX), float(mousePosY)};
+		cameraRotate->x += (currentMousePos.y - preMousePos.y) / 500;
+		cameraRotate->y += (currentMousePos.x - preMousePos.x) / 500;
+		preMousePos = {float(mousePosX), float(mousePosY)};
+	} else if (Novice::IsPressMouse(2)) {
+		// マウスの中キー
+		isMouseMove = true;
+		currentMousePos = {float(mousePosX), float(mousePosY)};
+		Vector3 mouseVector = {currentMousePos.x - preMousePos.x, currentMousePos.y - preMousePos.y, 0};
+		if (abs(mouseVector.x) > 1 || abs(mouseVector.y) > 1) {
+			move = Add(move, Multiply(mouseVector.x / 250, right));
+			move = Add(move, Multiply(mouseVector.y / 250, up));
+		}
+		preMousePos = {float(mousePosX), float(mousePosY)};
+	} else {
+		preMousePos = {float(mousePosX), float(mousePosY)};
+	}
+
+	// 正規化、速度は同じにするために
+	if (!isMouseMove) {
+		if (move.x != 0 || move.y != 0 || move.z != 0) {
+			move = Normalize(move);
+			move = Multiply(speed, move);
+		}
+	}
+	cameraPos->x += move.x;
+	cameraPos->y += move.y;
+	cameraPos->z += move.z;
 }
 
 void DrawGrid(const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM) {
@@ -457,8 +549,8 @@ void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectionM, const Ma
 }
 
 Vector3 Project(const Vector3& v1, const Vector3& v2) {
-	float dot = Dot(v1, UnitVector(v2));
-	return Vector3(dot * UnitVector(v2).x, dot * UnitVector(v2).y, dot * UnitVector(v2).z);
+	float dot = Dot(v1, Normalize(v2));
+	return Vector3(dot * Normalize(v2).x, dot * Normalize(v2).y, dot * Normalize(v2).z);
 }
 
 Vector3 ClosestPoint(const Vector3& point, const Segment& segment) {
@@ -466,4 +558,11 @@ Vector3 ClosestPoint(const Vector3& point, const Segment& segment) {
 	Vector3 b = segment.diff;
 	Vector3 projBA = Project(a, b);
 	return Add(segment.origin, projBA);
+}
+
+bool IsCollision(const Sphere& s1, const Sphere& s2) {
+	float distance = Length(Subtract(s2.center, s1.center));
+	if (distance <= s1.radius + s2.radius)
+		return true;
+	return false;
 }
