@@ -80,6 +80,7 @@ Vector3 Perpendicular(const Vector3& vector);
 #pragma region 物理計算
 bool IsCollision(const Sphere& s1, const Sphere& s2);
 bool IsCollision(const Sphere& sphere, const Plane& plane);
+bool IsCollision(const Segment& segment, const Plane& plane);
 #pragma endregion
 
 #pragma region 工具
@@ -98,6 +99,8 @@ void MouseCameraDrawIcon(float windowWidth, float windowHeight, bool showHelpTex
 #pragma region 描画関数
 // 3Dスペースの平面としてネットを描画
 void DrawGrid(const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM);
+// 線分を描画
+void DrawSegment(const Segment& segment, const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM, uint32_t color);
 // 球を描画
 void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM, uint32_t color);
 // 平面を描画
@@ -119,9 +122,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Vector3 cameraRotate = {0.26f, 0, 0};      // カメラの回転
 	Vector3 gridPostion{0, 0, 0};              // ネットの座標
 
-	Sphere sphere = {
-	    {0, 0, 0},
-        1.f
+	Segment segment = {
+	    {-0.45f, 0.41f, 0},
+        {1,      0.58f, 0}
     };
 	Plane plane = {
 	    {0, 1, 0},
@@ -145,11 +148,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		ImGui::Begin("DeBug Window");
 		ImGui::DragFloat3("Camera Translate", &cameraPostion.x, 0.01f);
 		ImGui::DragFloat3("Camera Rotate", &cameraRotate.x, 0.01f);
-		ImGui::DragFloat3("Sphere Center", &sphere.center.x, 0.01f);
-		ImGui::DragFloat("Sphere Radius", &sphere.radius, 0.01f);
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
 		ImGui::DragFloat3("Plane Normal", &plane.normal.x, 0.01f);
 		plane.normal = Normalize(plane.normal);
 		ImGui::DragFloat("Plane Distance", &plane.distance, 0.01f);
+		ImGui::DragFloat3("Segment origin", &segment.origin.x, 0.01f);
+		ImGui::DragFloat3("Segment Diff", &segment.diff.x, 0.01f);
 		ImGui::End();
 
 		// DebugCamera
@@ -168,7 +174,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		// 衝突判定
 		uint32_t color = WHITE;
-		if (IsCollision(sphere, plane))
+		if (IsCollision(segment, plane))
 			color = RED;
 
 		///
@@ -180,8 +186,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		///
 
 		DrawGrid(worldViewProjectionMatrix, viewprotMatrix);
-		DrawSphere(sphere, worldViewProjectionMatrix, viewprotMatrix, color);
 		DrawPlane(plane, worldViewProjectionMatrix, viewprotMatrix, WHITE);
+		DrawSegment(segment, worldViewProjectionMatrix, viewprotMatrix, color);
 
 		MouseCameraDrawIcon(kWindowWidth, kWindwoHeight, true); // Draw DebugCamera Icon
 
@@ -583,6 +589,12 @@ void DrawGrid(const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM) {
 	}
 }
 
+void DrawSegment(const Segment& segment, const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM, uint32_t color) {
+	Vector3 start = Transform(Transform(segment.origin, viewProjectionM), viewprotM);
+	Vector3 end = Transform(Transform(Add(segment.origin, segment.diff), viewProjectionM), viewprotM);
+	Novice::DrawLine((int)start.x, (int)start.y, (int)end.x, (int)end.y, color);
+}
+
 void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM, uint32_t color) {
 	const uint32_t kSubdivison = 20;                            // 分割数
 	const float kLatEvery = acosf(-1) / float(kSubdivison);     // 緯度分割１つ分の角度
@@ -679,6 +691,19 @@ bool IsCollision(const Sphere& sphere, const Plane& plane) {
 	Vector3 planeNormal_normalize = Normalize(plane.normal);
 	float k = fabsf(Dot(planeNormal_normalize, sphere.center) - plane.distance);
 	if (k <= sphere.radius)
+		return true;
+	return false;
+}
+
+bool IsCollision(const Segment& segment, const Plane& plane) {
+	Vector3 planeNormal_normalize = Normalize(plane.normal);
+	float dot = Dot(planeNormal_normalize, segment.diff);
+	// 垂直の場合
+	if (dot == 0.0f)
+		return false;
+	// もし0<=t<=1なら、衝突している点は線分の一つの点
+	float t = (plane.distance - Dot(segment.origin, planeNormal_normalize)) / dot;
+	if (t >= 0 && t <= 1)
 		return true;
 	return false;
 }
