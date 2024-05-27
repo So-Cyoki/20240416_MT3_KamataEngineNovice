@@ -19,14 +19,19 @@ struct Vector3 { // ベクトル3
 struct Matrix4x4 { // 4x4行列
 	float m[4][4];
 };
-struct Segment {    // 線分
-	Vector3 origin; // 始点
-	Vector3 diff;   // 終点への差分ベクトル
+struct Segment { // 線分(Vector3 始点、Vector3 終点への差分ベクトル)
+	Vector3 origin;
+	Vector3 diff;
 };
-struct Sphere { // 球
+struct Sphere { // 球(Vector3 中心、float 半径)
 	Vector3 center;
 	float radius;
 };
+struct Plane { // 平面(Vector3 法線、float 距離)
+	Vector3 normal;
+	float distance;
+};
+
 const float kWindowWidth = 1280; // スクリーンの横
 const float kWindwoHeight = 720; // スクリーンの縦
 #pragma endregion
@@ -68,10 +73,13 @@ Vector3 Transform(const Vector3& vector, const Matrix4x4& matrix);
 Vector3 Project(const Vector3& v1, const Vector3& v2);
 // 最近接点
 Vector3 ClosestPoint(const Vector3& point, const Segment& segment);
+// 垂直ベクトル
+Vector3 Perpendicular(const Vector3& vector);
 #pragma endregion
 
 #pragma region 物理計算
 bool IsCollision(const Sphere& s1, const Sphere& s2);
+bool IsCollision(const Sphere& sphere, const Plane& plane);
 #pragma endregion
 
 #pragma region 工具
@@ -82,11 +90,9 @@ void MatrixScreenPrintf(int x, int y, const Matrix4x4 matrix, const char* label)
 void VectorScreenPrintf(int x, int y, const Vector3& vector, const char* label);
 
 // マウスでカメラを移動
-Vector2 preMousePos{}; // 前１フレームの位置
-// マウスでカメラを制御する
-void MouseCamera(Vector3* cameraPos, Vector3* cameraRotate, char key[]);
-// マウスでカメラを制御する時アイコンを表す
-void MouseCameraDrawIcon(float windowWidth, float windowHeight);
+Vector2 preMousePos{};                                                              // 前１フレームの位置
+void MouseCamera(Vector3* cameraPos, Vector3* cameraRotate, char key[]);            // マウスでカメラを制御する
+void MouseCameraDrawIcon(float windowWidth, float windowHeight, bool showHelpText); // マウスでカメラを制御する時アイコンを表す
 #pragma endregion
 
 #pragma region 描画関数
@@ -94,6 +100,8 @@ void MouseCameraDrawIcon(float windowWidth, float windowHeight);
 void DrawGrid(const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM);
 // 球を描画
 void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM, uint32_t color);
+// 平面を描画
+void DrawPlane(const Plane& plane, const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM, uint32_t color);
 #pragma endregion
 
 // Windowsアプリでのエントリーポイント(main関数)
@@ -111,13 +119,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Vector3 cameraRotate = {0.26f, 0, 0};      // カメラの回転
 	Vector3 gridPostion{0, 0, 0};              // ネットの座標
 
-	Sphere sphereA = {
+	Sphere sphere = {
 	    {0, 0, 0},
         1.f
     };
-	Sphere sphereB = {
-	    {1.5f, 0, 1.5f},
-        0.5f
+	Plane plane = {
+	    {0, 1, 0},
+        1
     };
 
 	// ウィンドウの×ボタンが押されるまでループ
@@ -137,16 +145,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		ImGui::Begin("DeBug Window");
 		ImGui::DragFloat3("Camera Translate", &cameraPostion.x, 0.01f);
 		ImGui::DragFloat3("Camera Rotate", &cameraRotate.x, 0.01f);
-		ImGui::DragFloat3("SphereA Center", &sphereA.center.x, 0.01f);
-		ImGui::DragFloat("SphereA Radius", &sphereA.radius, 0.01f);
-		ImGui::DragFloat3("SphereB Center", &sphereB.center.x, 0.01f);
-		ImGui::DragFloat("SphereB Radius", &sphereB.radius, 0.01f);
+		ImGui::DragFloat3("Sphere Center", &sphere.center.x, 0.01f);
+		ImGui::DragFloat("Sphere Radius", &sphere.radius, 0.01f);
+		ImGui::DragFloat3("Plane Normal", &plane.normal.x, 0.01f);
+		plane.normal = Normalize(plane.normal);
+		ImGui::DragFloat("Plane Distance", &plane.distance, 0.01f);
 		ImGui::End();
 
+		// DebugCamera
 		MouseCamera(&cameraPostion, &cameraRotate, keys);
 
 		// レンダリングパイプライン計算
-		if (cameraPostion.z == 0) // 反対側がないので、Z軸必ず０にしないで！
+		if (cameraPostion.z == 0)
 			cameraPostion.z = -0.0001f;
 		Matrix4x4 cameraMatrix = MakeAffineMatrix({1, 1, 1}, cameraRotate, cameraPostion);
 		Matrix4x4 viewMatrix = Inverse(cameraMatrix);
@@ -158,7 +168,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		// 衝突判定
 		uint32_t color = WHITE;
-		if (IsCollision(sphereA, sphereB))
+		if (IsCollision(sphere, plane))
 			color = RED;
 
 		///
@@ -170,10 +180,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		///
 
 		DrawGrid(worldViewProjectionMatrix, viewprotMatrix);
-		DrawSphere(sphereB, worldViewProjectionMatrix, viewprotMatrix, WHITE);
-		DrawSphere(sphereA, worldViewProjectionMatrix, viewprotMatrix, color);
+		DrawSphere(sphere, worldViewProjectionMatrix, viewprotMatrix, color);
+		DrawPlane(plane, worldViewProjectionMatrix, viewprotMatrix, WHITE);
 
-		MouseCameraDrawIcon(kWindowWidth, kWindwoHeight);
+		MouseCameraDrawIcon(kWindowWidth, kWindwoHeight, true); // Draw DebugCamera Icon
 
 		///
 		/// ↑描画処理ここまで
@@ -394,8 +404,12 @@ void VectorScreenPrintf(int x, int y, const Vector3& vector, const char* label) 
 }
 
 void MouseCamera(Vector3* cameraPos, Vector3* cameraRotate, char key[]) {
+	float moveSpeed = 0.1f;     // キーボードで移動のスピード
+	float wheelSpeed = 0.3f;    // マウスのホイールスクロールのスピード
+	float rotationSpeed = 0.4f; // マウスの右キーで回るスピード
+	float dragSpeed = 0.5f;     // マウスの中キーで移動のスピード
+
 	Vector3 front{}, right{}, up{}, move{}; // カメラの前・横・上の向きと総合の移動ベクトル
-	float speed = 0.1f;                     // スピード
 	bool isMouseMove = false;               // マウスで移動
 	//  カメラの前方向を計算
 	front.x = sinf(cameraRotate->y) * cosf(cameraRotate->x);
@@ -425,7 +439,7 @@ void MouseCamera(Vector3* cameraPos, Vector3* cameraRotate, char key[]) {
 	} else {
 		// マウスのホイールスクロール
 		isMouseMove = true;
-		move = Multiply(float(Novice::GetWheel()) / 100, front);
+		move = Multiply(float(Novice::GetWheel()) * wheelSpeed * 0.01f, front);
 	}
 
 	// カメラをマウスで回転
@@ -435,8 +449,8 @@ void MouseCamera(Vector3* cameraPos, Vector3* cameraRotate, char key[]) {
 	if (Novice::IsPressMouse(1)) {
 		// マウスの右キー
 		currentMousePos = {float(mousePosX), float(mousePosY)};
-		cameraRotate->x += (currentMousePos.y - preMousePos.y) / 700;
-		cameraRotate->y += (currentMousePos.x - preMousePos.x) / 700;
+		cameraRotate->x += (currentMousePos.y - preMousePos.y) * rotationSpeed * 0.01f;
+		cameraRotate->y += (currentMousePos.x - preMousePos.x) * rotationSpeed * 0.01f;
 		preMousePos = {float(mousePosX), float(mousePosY)};
 	} else if (Novice::IsPressMouse(2)) {
 		// マウスの中キー
@@ -444,8 +458,8 @@ void MouseCamera(Vector3* cameraPos, Vector3* cameraRotate, char key[]) {
 		currentMousePos = {float(mousePosX), float(mousePosY)};
 		Vector3 mouseVector = {currentMousePos.x - preMousePos.x, currentMousePos.y - preMousePos.y, 0};
 		if (abs(mouseVector.x) > 1 || abs(mouseVector.y) > 1) {
-			move = Add(move, Multiply(mouseVector.x / 250, right));
-			move = Add(move, Multiply(mouseVector.y / 250, up));
+			move = Add(move, Multiply(mouseVector.x * dragSpeed * 0.01f, right));
+			move = Add(move, Multiply(mouseVector.y * dragSpeed * 0.01f, up));
 		}
 		preMousePos = {float(mousePosX), float(mousePosY)};
 	} else {
@@ -456,7 +470,7 @@ void MouseCamera(Vector3* cameraPos, Vector3* cameraRotate, char key[]) {
 	if (!isMouseMove) {
 		if (move.x != 0 || move.y != 0 || move.z != 0) {
 			move = Normalize(move);
-			move = Multiply(speed, move);
+			move = Multiply(moveSpeed, move);
 		}
 	}
 	cameraPos->x += move.x;
@@ -464,16 +478,18 @@ void MouseCamera(Vector3* cameraPos, Vector3* cameraRotate, char key[]) {
 	cameraPos->z += move.z;
 }
 
-void MouseCameraDrawIcon(float windowWidth, float windowHeight) {
+void MouseCameraDrawIcon(float windowWidth, float windowHeight, bool showHelpText) {
 	windowWidth;
-	// Text
-	float textLine = 17;
-	Vector2 textPos{0 + 5, windowHeight - textLine * 5 - 5};
-	Novice::ScreenPrintf(int(textPos.x), int(textPos.y), "----- Mouse Camera Usage -----");
-	Novice::ScreenPrintf(int(textPos.x), int(textPos.y + textLine * 1), "(The control logic is the same as Unity)");
-	Novice::ScreenPrintf(int(textPos.x), int(textPos.y + textLine * 2), "Right mouse: camera rotation");
-	Novice::ScreenPrintf(int(textPos.x), int(textPos.y + textLine * 3), "Middle mouse: camera movement and zoom in/out");
-	Novice::ScreenPrintf(int(textPos.x), int(textPos.y + textLine * 4), "Right mouse + WASD: camera move");
+	if (showHelpText) {
+		// Text
+		float textLine = 17;
+		Vector2 textPos{0 + 5, windowHeight - textLine * 5 - 5};
+		Novice::ScreenPrintf(int(textPos.x), int(textPos.y), "----- Mouse Camera Usage -----");
+		Novice::ScreenPrintf(int(textPos.x), int(textPos.y + textLine * 1), "(The control logic is the same as Unity)");
+		Novice::ScreenPrintf(int(textPos.x), int(textPos.y + textLine * 2), "Right mouse: camera rotation");
+		Novice::ScreenPrintf(int(textPos.x), int(textPos.y + textLine * 3), "Middle mouse: camera movement and zoom in/out");
+		Novice::ScreenPrintf(int(textPos.x), int(textPos.y + textLine * 4), "Right mouse + WASD: camera move");
+	}
 	// Icon
 	int mouseX, mouseY;
 	Novice::GetMousePosition(&mouseX, &mouseY);
@@ -602,6 +618,38 @@ void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectionM, const Ma
 	}
 }
 
+void DrawPlane(const Plane& plane, const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM, uint32_t color) {
+	// 法線は必ず単位ベクトルにする
+	Vector3 planeNormal_normalize = plane.normal;
+	// 中心点を決める
+	Vector3 center = Multiply(plane.distance, planeNormal_normalize);
+	// 中心点によって垂直してる4つのベクトル
+	Vector3 perpendiculars[4]{};
+	// 法線と垂直ベクトルを一つを求める
+	perpendiculars[0] = Normalize(Perpendicular(planeNormal_normalize));
+	// 2の逆ベクトルを求める
+	perpendiculars[1] = {-perpendiculars[0].x, -perpendiculars[0].y, -perpendiculars[0].z};
+	// 2と法線のクロス積を求める
+	perpendiculars[2] = Cross(planeNormal_normalize, perpendiculars[0]);
+	// 4の逆ベクトルを求める
+	perpendiculars[3] = {-perpendiculars[2].x, -perpendiculars[2].y, -perpendiculars[2].z};
+	// 4頂点
+	// 4垂直ベクトルを中心点にそれぞれ定数倍して足すと頂点が出来上がる
+	Vector3 points[4]{};
+	for (int i = 0; i < 4; ++i) {
+		Vector3 extend = Multiply(2, perpendiculars[i]);
+		Vector3 point = Add(center, extend);
+		points[i] = Transform(Transform(point, viewProjectionM), viewprotM);
+	}
+	// 4頂点を一つずつにつながて、描画する
+	Novice::DrawLine(int(points[0].x), int(points[0].y), int(points[2].x), int(points[2].y), color);
+	Novice::DrawLine(int(points[1].x), int(points[1].y), int(points[2].x), int(points[2].y), color);
+	Novice::DrawLine(int(points[1].x), int(points[1].y), int(points[3].x), int(points[3].y), color);
+	Novice::DrawLine(int(points[3].x), int(points[3].y), int(points[0].x), int(points[0].y), color);
+	// Novice::DrawTriangle(int(points[0].x), int(points[0].y), int(points[2].x), int(points[2].y), int(points[1].x), int(points[1].y), color, kFillModeSolid);
+	//  Novice::DrawTriangle(int(points[1].x), int(points[1].y), int(points[3].x), int(points[3].y), int(points[0].x), int(points[0].y), color, kFillModeSolid);
+}
+
 Vector3 Project(const Vector3& v1, const Vector3& v2) {
 	float dot = Dot(v1, Normalize(v2));
 	return Vector3(dot * Normalize(v2).x, dot * Normalize(v2).y, dot * Normalize(v2).z);
@@ -614,9 +662,23 @@ Vector3 ClosestPoint(const Vector3& point, const Segment& segment) {
 	return Add(segment.origin, projBA);
 }
 
+Vector3 Perpendicular(const Vector3& vector) {
+	if (vector.x != 0 || vector.y != 0)
+		return {-vector.y, vector.x, 0};
+	return {0, -vector.z, vector.x};
+}
+
 bool IsCollision(const Sphere& s1, const Sphere& s2) {
 	float distance = Length(Subtract(s2.center, s1.center));
 	if (distance <= s1.radius + s2.radius)
+		return true;
+	return false;
+}
+
+bool IsCollision(const Sphere& sphere, const Plane& plane) {
+	Vector3 planeNormal_normalize = Normalize(plane.normal);
+	float k = fabsf(Dot(planeNormal_normalize, sphere.center) - plane.distance);
+	if (k <= sphere.radius)
 		return true;
 	return false;
 }
