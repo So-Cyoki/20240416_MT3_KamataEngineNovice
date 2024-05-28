@@ -34,6 +34,10 @@ struct Plane { // 平面(Vector3 法線、float 距離)
 struct Triangle { // 三角形(Vector3 頂点)
 	Vector3 vertices[3];
 };
+struct AABB { // 軸平行境界箱(Vector3 min、Vector3 max)
+	Vector3 min;
+	Vector3 max;
+};
 
 const float kWindowWidth = 1280; // スクリーンの横
 const float kWindwoHeight = 720; // スクリーンの縦
@@ -85,6 +89,7 @@ bool IsCollision(const Sphere& s1, const Sphere& s2);
 bool IsCollision(const Sphere& sphere, const Plane& plane);
 bool IsCollision(const Segment& segment, const Plane& plane);
 bool IsCollision(const Triangle& triangle, const Segment& segment);
+bool IsCollision(const AABB& aabb1, const AABB& aabb2);
 #pragma endregion
 
 #pragma region 工具
@@ -111,6 +116,8 @@ void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectionM, const Ma
 void DrawPlane(const Plane& plane, const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM, uint32_t color);
 // 三角形を描画
 void DrawTriangle(const Triangle& triangle, const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM, uint32_t color);
+// 軸平行境界箱(AABB)を描画
+void DrawAABB(const AABB& aabb, const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM, uint32_t color);
 #pragma endregion
 
 // Windowsアプリでのエントリーポイント(main関数)
@@ -128,12 +135,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Vector3 cameraRotate = {0.26f, 0, 0};      // カメラの回転
 	Vector3 gridPostion{0, 0, 0};              // ネットの座標
 
-	Segment segment = {
-	    {0, 0.5f, -1},
-        {0, 0.5f, 2 }
+	AABB aabb1 = {
+	    .min{-0.5f, -0.5f, -0.5f},
+        .max{0,     0,     0    }
     };
-	Triangle triangle = {
-	    {-1, 0, 0, 0, 1, 0, 1, 0, 0}
+	AABB aabb2 = {
+	    .min{0.2f, 0.2f, 0.2f},
+        .max{1,    1,    1   }
     };
 
 	// ウィンドウの×ボタンが押されるまでループ
@@ -156,11 +164,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		ImGui::Spacing();
 		ImGui::Separator();
 		ImGui::Spacing();
-		ImGui::DragFloat3("Triangle.v0", &triangle.vertices[0].x, 0.01f);
-		ImGui::DragFloat3("Triangle.v1", &triangle.vertices[1].x, 0.01f);
-		ImGui::DragFloat3("Triangle.v2", &triangle.vertices[2].x, 0.01f);
-		ImGui::DragFloat3("Segment origin", &segment.origin.x, 0.01f);
-		ImGui::DragFloat3("Segment Diff", &segment.diff.x, 0.01f);
+		ImGui::DragFloat3("aabb1.min", &aabb1.min.x, 0.01f);
+		ImGui::DragFloat3("aabb1.max", &aabb1.max.x, 0.01f);
+		ImGui::DragFloat3("aabb2.min", &aabb2.min.x, 0.01f);
+		ImGui::DragFloat3("aabb2.max", &aabb2.max.x, 0.01f);
 		ImGui::End();
 
 		// DebugCamera
@@ -179,7 +186,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		// 衝突判定
 		uint32_t color = WHITE;
-		if (IsCollision(triangle, segment))
+		if (IsCollision(aabb1, aabb2))
 			color = RED;
 
 		///
@@ -191,8 +198,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		///
 
 		DrawGrid(worldViewProjectionMatrix, viewprotMatrix);
-		DrawTriangle(triangle, worldViewProjectionMatrix, viewprotMatrix, WHITE);
-		DrawSegment(segment, worldViewProjectionMatrix, viewprotMatrix, color);
+		DrawAABB(aabb2, worldViewProjectionMatrix, viewprotMatrix, WHITE);
+		DrawAABB(aabb1, worldViewProjectionMatrix, viewprotMatrix, color);
 
 		MouseCameraDrawIcon(kWindowWidth, kWindwoHeight, true); // Draw DebugCamera Icon
 
@@ -674,6 +681,38 @@ void DrawTriangle(const Triangle& triangle, const Matrix4x4& viewProjectionM, co
 	Novice::DrawTriangle(int(vertices0.x), int(vertices0.y), int(vertices1.x), int(vertices1.y), int(vertices2.x), int(vertices2.y), color, kFillModeWireFrame);
 }
 
+void DrawAABB(const AABB& aabb, const Matrix4x4& viewProjectionM, const Matrix4x4& viewprotM, uint32_t color) {
+	Vector3 vertices[8]{};
+	vertices[0] = aabb.min;
+	vertices[1] = {aabb.max.x, aabb.min.y, aabb.min.z};
+	vertices[2] = {aabb.min.x, aabb.min.y, aabb.max.z};
+	vertices[3] = {aabb.max.x, aabb.min.y, aabb.max.z};
+	vertices[4] = {aabb.min.x, aabb.max.y, aabb.max.z};
+	vertices[5] = {aabb.max.x, aabb.max.y, aabb.min.z};
+	vertices[6] = {aabb.min.x, aabb.max.y, aabb.min.z};
+	vertices[7] = aabb.max;
+
+	Vector3 vertices_screen[8]{};
+	for (int i = 0; i < 8; ++i) {
+		vertices_screen[i] = Transform(Transform(vertices[i], viewProjectionM), viewprotM);
+	}
+	// 下の面
+	Novice::DrawLine(int(vertices_screen[0].x), int(vertices_screen[0].y), int(vertices_screen[1].x), int(vertices_screen[1].y), color);
+	Novice::DrawLine(int(vertices_screen[0].x), int(vertices_screen[0].y), int(vertices_screen[2].x), int(vertices_screen[2].y), color);
+	Novice::DrawLine(int(vertices_screen[1].x), int(vertices_screen[1].y), int(vertices_screen[3].x), int(vertices_screen[3].y), color);
+	Novice::DrawLine(int(vertices_screen[2].x), int(vertices_screen[2].y), int(vertices_screen[3].x), int(vertices_screen[3].y), color);
+	// 上の面
+	Novice::DrawLine(int(vertices_screen[7].x), int(vertices_screen[7].y), int(vertices_screen[4].x), int(vertices_screen[4].y), color);
+	Novice::DrawLine(int(vertices_screen[7].x), int(vertices_screen[7].y), int(vertices_screen[5].x), int(vertices_screen[5].y), color);
+	Novice::DrawLine(int(vertices_screen[4].x), int(vertices_screen[4].y), int(vertices_screen[6].x), int(vertices_screen[6].y), color);
+	Novice::DrawLine(int(vertices_screen[5].x), int(vertices_screen[5].y), int(vertices_screen[6].x), int(vertices_screen[6].y), color);
+	// 縦の線
+	Novice::DrawLine(int(vertices_screen[0].x), int(vertices_screen[0].y), int(vertices_screen[6].x), int(vertices_screen[6].y), color);
+	Novice::DrawLine(int(vertices_screen[1].x), int(vertices_screen[1].y), int(vertices_screen[5].x), int(vertices_screen[5].y), color);
+	Novice::DrawLine(int(vertices_screen[2].x), int(vertices_screen[2].y), int(vertices_screen[4].x), int(vertices_screen[4].y), color);
+	Novice::DrawLine(int(vertices_screen[3].x), int(vertices_screen[3].y), int(vertices_screen[7].x), int(vertices_screen[7].y), color);
+}
+
 Vector3 Project(const Vector3& v1, const Vector3& v2) {
 	float dot = Dot(v1, Normalize(v2));
 	return Vector3(dot * Normalize(v2).x, dot * Normalize(v2).y, dot * Normalize(v2).z);
@@ -745,6 +784,13 @@ bool IsCollision(const Triangle& triangle, const Segment& segment) {
 	Vector3 crossCA = Cross(Subtract(triangle.vertices[0], triangle.vertices[2]), Subtract(p, triangle.vertices[0]));
 	// もしすべての小三角形のクロス積と法線が同じ方向を向いてたら、衝突している
 	if (Dot(crossAB, plane.normal) >= 0 && Dot(crossBC, plane.normal) >= 0 && Dot(crossCA, plane.normal) >= 0)
+		return true;
+
+	return false;
+}
+
+bool IsCollision(const AABB& aabb1, const AABB& aabb2) {
+	if ((aabb1.min.x <= aabb2.max.x && aabb1.max.x >= aabb2.min.x) && (aabb1.min.y <= aabb2.max.y && aabb1.max.y >= aabb2.min.y) && (aabb1.min.z <= aabb2.max.z && aabb1.max.z >= aabb2.min.z))
 		return true;
 
 	return false;
