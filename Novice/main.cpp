@@ -92,6 +92,7 @@ bool IsCollision(const Segment& segment, const Plane& plane);
 bool IsCollision(const Triangle& triangle, const Segment& segment);
 bool IsCollision(const AABB& aabb1, const AABB& aabb2);
 bool IsCollision(const AABB& aabb, const Sphere& sphere);
+bool IsCollision(const AABB& aabb, const Segment& segment);
 #pragma endregion
 
 #pragma region 工具
@@ -137,13 +138,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Vector3 cameraRotate = {0.26f, 0, 0};      // カメラの回転
 	Vector3 gridPostion{0, 0, 0};              // ネットの座標
 
-	Sphere sphere = {
-	    {1, 1, 1},
-        1
-    };
 	AABB aabb = {
 	    .min{-0.5f, -0.5f, -0.5f},
-        .max{0,     0,     0    }
+        .max{0.5f,  0.5f,  0.5f }
+    };
+	Segment segment = {
+	    .origin{-0.7f, 0.3f, 0},
+        .diff{2. - 0.5f, 0}
     };
 
 	// ウィンドウの×ボタンが押されるまでループ
@@ -168,8 +169,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		ImGui::Spacing();
 		ImGui::DragFloat3("aabb.min", &aabb.min.x, 0.01f);
 		ImGui::DragFloat3("aabb.max", &aabb.max.x, 0.01f);
-		ImGui::DragFloat3("sphere.center", &sphere.center.x, 0.01f);
-		ImGui::DragFloat("sphere.radius", &sphere.radius, 0.01f);
+		ImGui::DragFloat3("segment.origin", &segment.origin.x, 0.01f);
+		ImGui::DragFloat3("segment.diff", &segment.diff.x, 0.01f);
 		ImGui::End();
 
 		// DebugCamera
@@ -180,15 +181,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			cameraPostion.z = -0.0001f;
 		Matrix4x4 cameraMatrix = MakeAffineMatrix({1, 1, 1}, cameraRotate, cameraPostion);
 		Matrix4x4 viewMatrix = Inverse(cameraMatrix);
-		Matrix4x4 viewprotMatrix = MakeViewportMatrix(0, 0, kWindowWidth, kWindwoHeight, 0, 1);
 		Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, kWindowWidth / kWindwoHeight, 0.1f, 100);
-
 		Matrix4x4 worldMatrix = MakeAffineMatrix({1, 1, 1}, {0, 0, 0}, gridPostion);
-		Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
+
+		Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix)); // ワールド座標をスクリーン座標に変える
+		Matrix4x4 viewprotMatrix = MakeViewportMatrix(0, 0, kWindowWidth, kWindwoHeight, 0, 1);              // スクリーンの大きさを設置する
 
 		// 衝突判定
 		uint32_t color = WHITE;
-		if (IsCollision(aabb, sphere))
+		if (IsCollision(aabb, segment))
 			color = RED;
 
 		///
@@ -200,7 +201,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		///
 
 		DrawGrid(worldViewProjectionMatrix, viewprotMatrix);
-		DrawSphere(sphere, worldViewProjectionMatrix, viewprotMatrix, WHITE);
+		DrawSegment(segment, worldViewProjectionMatrix, viewprotMatrix, WHITE);
 		DrawAABB(aabb, worldViewProjectionMatrix, viewprotMatrix, color);
 
 		MouseCameraDrawIcon(kWindowWidth, kWindwoHeight, true); // Draw DebugCamera Icon
@@ -811,4 +812,27 @@ bool IsCollision(const AABB& aabb, const Sphere& sphere) {
 		return true;
 
 	return false;
+}
+
+bool IsCollision(const AABB& aabb, const Segment& segment) {
+	// X軸の衝突点t
+	float tNearX = (aabb.min.x - segment.origin.x) / segment.diff.x;
+	float tFarX = (aabb.max.x - segment.origin.x) / segment.diff.x;
+	if (tNearX > tFarX)
+		std::swap(tNearX, tFarX);
+	// Y軸の衝突点t
+	float tNearY = (aabb.min.y - segment.origin.y) / segment.diff.y;
+	float tFarY = (aabb.max.y - segment.origin.y) / segment.diff.y;
+	if (tNearY > tFarY)
+		std::swap(tNearY, tFarY);
+	// Z軸の衝突点t
+	float tNearZ = (aabb.min.z - segment.origin.z) / segment.diff.z;
+	float tFarZ = (aabb.max.z - segment.origin.z) / segment.diff.z;
+	if (tNearZ > tFarZ)
+		std::swap(tNearZ, tFarZ);
+	// 最近い点を最遠い点を計算する
+	float tmin = max(max(tNearX, tNearY), tNearZ);
+	float tmax = min(min(tFarX, tFarY), tFarZ);
+	// 衝突した部分は媒介変数の範囲内か？
+	return (tmin <= tmax && tmax >= 0.0f && tmin <= 1.0f);
 }
